@@ -35,7 +35,8 @@ type va_list* {.importc: "va_list", header: "<stdarg.h>".} = object
 proc va_start(format: va_list, args: PCHAR) {.stdcall, importc, header: "stdio.h"}
 proc va_end(ap: va_list) {.stdcall, importc, header: "stdio.h"}
 proc vprintf(format: cstring, args: va_list) {.stdcall, importc, header: "stdio.h"}
-proc vsnprintf(buffer: cstring; size: int; fmt: cstring; args: va_list): int {.stdcall, importc, dynlib: "msvcrt".}
+# Use _vsnprintf instead of vsnprintf for ARM64 Windows compatibility
+proc c_vsnprintf(buffer: cstring; size: int; fmt: cstring; args: va_list): int {.stdcall, importc: "_vsnprintf", dynlib: "msvcrt".}
 
 var beaconCompatibilityOutput: PCHAR = nil
 var beaconCompatibilitySize: int = 0
@@ -160,14 +161,14 @@ proc BeaconFormatPrintf(format: ptr formatp, fmt: PCHAR): void {.stdcall, vararg
     var length: int = 0
 
     va_start(args, fmt)
-    length = vsnprintf(NULL, 0, fmt, args)
+    length = c_vsnprintf(NULL, 0, fmt, args)
     va_end(args)
     
     if format.length + length > format.size:
         return
 
     va_start(args, fmt)
-    discard vsnprintf(format.buffer, length, fmt, args)
+    discard c_vsnprintf(format.buffer, length, fmt, args)
     va_end(args)
     format.length += length
     format.buffer += length
@@ -217,7 +218,7 @@ proc BeaconPrintf(typeArg: int, fmt: PCHAR):void{.stdcall, varargs.} =
     va_end(args)
 
     va_start(args, fmt)
-    length = vsnprintf(NULL, 0, fmt, args)
+    length = c_vsnprintf(NULL, 0, fmt, args)
     va_end(args)
     tempPtr = cast[PCHAR](realloc(beaconCompatibilityOutput,beaconCompatibilitySize + length + 1))
     if tempPtr == nil:
@@ -225,7 +226,7 @@ proc BeaconPrintf(typeArg: int, fmt: PCHAR):void{.stdcall, varargs.} =
     beaconCompatibilityOutput = tempPtr
     zeroMem(beaconCompatibilityOutput + beaconCompatibilityOffset, length + 1)
     va_start(args, fmt)
-    length = vsnprintf(beaconCompatibilityOutput+beaconCompatibilityOffset,length,fmt,args)
+    length = c_vsnprintf(beaconCompatibilityOutput+beaconCompatibilityOffset,length,fmt,args)
     beaconCompatibilitySize += length
     beaconCompatibilityOffset += length
     va_end(args)

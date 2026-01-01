@@ -10,11 +10,17 @@ srcDir        = "src"
 
 import os, strformat
 let cqRoot = getCurrentDir()
+
 task server, "Build conquest server binary": 
     exec fmt"nim c -d:CONQUEST_ROOT={cqRoot} src/server/main.nim"
 
-task client, "Build conquest client binary": 
+task client, "Build conquest client binary":
     exec fmt"nim c -d:release -d:CONQUEST_ROOT={cqRoot} src/client/main.nim"
+
+task all, "Build conquest client and server binaries":
+    exec fmt"nim c -d:CONQUEST_ROOT={cqRoot} src/server/main.nim"
+    exec fmt"nim c -d:release -d:CONQUEST_ROOT={cqRoot} src/client/main.nim"
+
 
 # Dependencies
 

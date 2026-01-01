@@ -14,18 +14,32 @@ proc generateBytes*(T: typedesc[Key | Iv | KeyRC4]): array =
     return bytes
 
 proc encrypt*(key: Key, iv: Iv, data: seq[byte], sequenceNumber: uint32 = 0): (seq[byte], AuthenticationTag) =
-    
+
     # Encrypt data using AES-256 GCM
     var encData = newSeq[byte](data.len)
     var tag: AuthenticationTag
-    
+
     var ctx: GCM[aes256]
-    ctx.init(key, iv, uint32.toBytes(sequenceNumber))    
-    
+    ctx.init(key, iv, uint32.toBytes(sequenceNumber))
+
     ctx.encrypt(data, encData)
     ctx.getTag(tag)
     ctx.clear()
-    
+
+    return (encData, tag)
+
+proc encryptNoAad*(key: Key, iv: Iv, data: seq[byte]): (seq[byte], AuthenticationTag) =
+    ## Encrypt data using AES-256 GCM without AAD (for configuration encryption)
+    var encData = newSeq[byte](data.len)
+    var tag: AuthenticationTag
+
+    var ctx: GCM[aes256]
+    ctx.init(key, iv, @[])  # Empty AAD
+
+    ctx.encrypt(data, encData)
+    ctx.getTag(tag)
+    ctx.clear()
+
     return (encData, tag)
 
 proc decrypt*(key: Key, iv: Iv, encData: seq[byte], sequenceNumber: uint32 = 0): (seq[byte], AuthenticationTag) =

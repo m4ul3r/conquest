@@ -95,17 +95,29 @@ type
         EXIT_PROCESS = "process"
         EXIT_THREAD = "thread"
 
-    ModuleType* = enum 
+    ModuleType* = enum
         MODULE_ALL = 0'u32
         MODULE_SLEEP = 1'u32
-        MODULE_SHELL = 2'u32 
+        MODULE_SHELL = 2'u32
         MODULE_BOF = 4'u32
         MODULE_DOTNET = 8'u32
-        MODULE_FILESYSTEM = 16'u32 
+        MODULE_FILESYSTEM = 16'u32
         MODULE_FILETRANSFER = 32'u32
         MODULE_SCREENSHOT = 64'u32
-        MODULE_SITUATIONAL_AWARENESS = 128'u32 
+        MODULE_SITUATIONAL_AWARENESS = 128'u32
         MODULE_TOKEN = 256'u32
+
+    AgentType* = enum
+        AGENT_MONARCH = 0'u8
+        AGENT_IMPERATOR = 1'u8
+
+    OutputFormat* = enum
+        OUTPUT_EXE = 0'u8
+        OUTPUT_DLL = 1'u8
+
+    Architecture* = enum
+        ARCH_X64 = 0'u8
+        ARCH_ARM64 = 1'u8
 
 # Encryption 
 type    
@@ -364,12 +376,28 @@ type
     ConsoleItems* = ref object
         items*: seq[ConsoleItem]
 
-    AgentBuildInformation* = ref object 
+    BinaryMetadata* = ref object
+        useCustomIcon*: bool
+        iconPath*: string           # Path to .ico file (predefined name or custom path)
+        productName*: string
+        productVersion*: string     # e.g., "1.0.0.0"
+        fileVersion*: string        # e.g., "1.0.0.0"
+        fileDescription*: string
+        companyName*: string
+        copyright*: string
+        originalFilename*: string
+
+    AgentBuildInformation* = ref object
+        agentType*: AgentType
+        outputFormat*: OutputFormat
+        architecture*: Architecture
         listenerId*: string
         sleepSettings*: SleepSettings
         verbose*: bool
         killDate*: int64
         modules*: uint32
+        metadata*: BinaryMetadata
+        nimCfgContent*: string
 
     LootItemType* = enum 
         DOWNLOAD = 0'u8 
