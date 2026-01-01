@@ -9,7 +9,7 @@ import ../../../modules/manager
 export addItem
 
 const BUILD_CONFIG_PATH = CONQUEST_ROOT / "data" / "build_config.json"
-const IMPERATOR_ROOT = "/home/m4ul3r/nim/imperator"
+const IMPERATOR_ROOT = CONQUEST_ROOT / "src" / "imperator"
 
 type
     AgentModalComponent* = ref object of RootObj

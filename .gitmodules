@@ -1,0 +1,4 @@
+[submodule "src/imperator"]
+	path = src/imperator
+	url = git@github.com:m4ul3r/imperator.git
+	branch = release/0.1.0

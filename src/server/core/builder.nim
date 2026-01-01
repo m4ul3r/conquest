@@ -6,7 +6,7 @@ import ../db/database
 import ../../common/[types, utils, serialize, crypto]
 
 const PLACEHOLDER = "PLACEHOLDER"
-const IMPERATOR_ROOT = "/home/m4ul3r/nim/imperator"
+const IMPERATOR_ROOT = CONQUEST_ROOT / "src" / "imperator"
 
 proc serializeConfiguration(cq: Conquest, listener: Listener, sleepSettings: SleepSettings, killDate: int64): seq[byte] = 
     
