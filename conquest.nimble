@@ -18,7 +18,7 @@ task client, "Build conquest client binary":
     exec fmt"nim c -d:release -d:CONQUEST_ROOT={cqRoot} src/client/main.nim"
 
 task all, "Build conquest client and server binaries":
-    exec fmt"nim c -d:CONQUEST_ROOT={cqRoot} src/server/main.nim"
+    exec fmt"nim c -d:release -d:CONQUEST_ROOT={cqRoot} src/server/main.nim"
     exec fmt"nim c -d:release -d:CONQUEST_ROOT={cqRoot} src/client/main.nim"
 
 

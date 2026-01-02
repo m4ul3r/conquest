@@ -50,8 +50,8 @@ type
         originalFilename: array[128, char]
         predefinedIcons: seq[string]
         # Config tab fields (nim.cfg editor)
-        monarchNimCfg: array[8192, char]
-        imperatorNimCfg: array[8192, char]
+        monarchNimCfg: string
+        imperatorNimCfg: string
         configLoaded: bool
 
 # Forward declarations
@@ -101,8 +101,8 @@ proc AgentModal*(): AgentModalComponent =
     result.predefinedIcons = @["None", "Windows", "Folder", "Document", "Setup", "Application"]
 
     # Initialize config tab fields
-    zeroMem(addr result.monarchNimCfg[0], result.monarchNimCfg.len)
-    zeroMem(addr result.imperatorNimCfg[0], result.imperatorNimCfg.len)
+    result.monarchNimCfg = newString(16384)
+    result.imperatorNimCfg = newString(16384)
     result.configLoaded = false
 
     # Load saved build config if available
@@ -145,36 +145,30 @@ proc resetModalValues*(component: AgentModalComponent) =
     for i in 0..<component.originalFilename.len: component.originalFilename[i] = '\0'
 
     # Reset config tab fields
-    for i in 0..<component.monarchNimCfg.len: component.monarchNimCfg[i] = '\0'
-    for i in 0..<component.imperatorNimCfg.len: component.imperatorNimCfg[i] = '\0'
+    component.monarchNimCfg = newString(16384)
+    component.imperatorNimCfg = newString(16384)
     component.configLoaded = false
 
-proc loadNimCfgFromDisk*(component: AgentModalComponent, isImperator: bool) =
-    ## Load nim.cfg content from disk into the appropriate buffer
-    let configPath = if isImperator:
-        IMPERATOR_ROOT / "nim.cfg"
-    else:
-        CONQUEST_ROOT / "src" / "agent" / "nim.cfg"
-
-    let configBuffer = if isImperator:
-        addr component.imperatorNimCfg[0]
-    else:
-        addr component.monarchNimCfg[0]
-
-    let bufferLen = if isImperator:
-        component.imperatorNimCfg.len
-    else:
-        component.monarchNimCfg.len
-
-    # Clear buffer
-    zeroMem(configBuffer, bufferLen)
+proc loadNimCfgFromDisk*(component: AgentModalComponent, agentType: AgentType) =
+    ## Load nim.cfg content from disk into the appropriate string buffer
+    let configPath = case agentType:
+        of AGENT_IMPERATOR: IMPERATOR_ROOT / "nim.cfg"
+        of AGENT_MONARCH: CONQUEST_ROOT / "src" / "agent" / "nim.cfg"
 
     try:
         if fileExists(configPath):
             let content = readFile(configPath)
-            # Copy to buffer, respecting buffer size limit
-            for i in 0..<min(content.len, bufferLen - 1):
-                cast[ptr UncheckedArray[char]](configBuffer)[i] = content[i]
+            # Create buffer with capacity for editing (content + room to grow)
+            let bufferSize = max(16384, content.len + 4096)
+            var buffer = newString(bufferSize)
+            # Copy content and null-terminate
+            for i in 0..<content.len:
+                buffer[i] = content[i]
+            for i in content.len..<bufferSize:
+                buffer[i] = '\0'
+            case agentType:
+                of AGENT_IMPERATOR: component.imperatorNimCfg = buffer
+                of AGENT_MONARCH: component.monarchNimCfg = buffer
     except:
         discard
 
@@ -212,8 +206,8 @@ proc saveBuildConfig*(component: AgentModalComponent) =
         "copyright": $cast[cstring](addr component.copyright[0]),
         "originalFilename": $cast[cstring](addr component.originalFilename[0]),
         # Config tab
-        "monarchNimCfg": $cast[cstring](addr component.monarchNimCfg[0]),
-        "imperatorNimCfg": $cast[cstring](addr component.imperatorNimCfg[0])
+        "monarchNimCfg": $cstring(component.monarchNimCfg),
+        "imperatorNimCfg": $cstring(component.imperatorNimCfg)
     }
     try:
         writeFile(BUILD_CONFIG_PATH, config.pretty())
@@ -275,16 +269,32 @@ proc loadBuildConfig*(component: AgentModalComponent) =
         copyToArray(component.copyright, config{"copyright"}.getStr(""))
         copyToArray(component.originalFilename, config{"originalFilename"}.getStr(""))
 
-        # Load nim.cfg content
+        # Helper to create a string buffer from content
+        proc toBuffer(content: string, minSize: int = 16384): string =
+            let bufferSize = max(minSize, content.len + 4096)
+            result = newString(bufferSize)
+            for i in 0..<content.len:
+                result[i] = content[i]
+            for i in content.len..<bufferSize:
+                result[i] = '\0'
+
+        # Load nim.cfg content - load from saved config or fall back to disk
         let monarchCfg = config{"monarchNimCfg"}.getStr("")
         let imperatorCfg = config{"imperatorNimCfg"}.getStr("")
+
+        # Load monarch config from saved or disk
         if monarchCfg.len > 0:
-            copyToArray(component.monarchNimCfg, monarchCfg)
+            component.monarchNimCfg = toBuffer(monarchCfg)
+        else:
+            component.loadNimCfgFromDisk(AGENT_MONARCH)
+
+        # Load imperator config from saved or disk
         if imperatorCfg.len > 0:
-            copyToArray(component.imperatorNimCfg, imperatorCfg)
-        # Mark as loaded if we found saved content
-        if monarchCfg.len > 0 or imperatorCfg.len > 0:
-            component.configLoaded = true
+            component.imperatorNimCfg = toBuffer(imperatorCfg)
+        else:
+            component.loadNimCfgFromDisk(AGENT_IMPERATOR)
+
+        component.configLoaded = true
     except:
         discard
 
@@ -296,7 +306,7 @@ proc drawLabeledRow(label: cstring, widgetWidth: float32, drawWidget: proc()) =
     drawWidget()
 
 # Tab 1: Basic settings
-proc drawBasicTab(component: AgentModalComponent, listeners: seq[UIListener], isImperator: bool) =
+proc drawBasicTab(component: AgentModalComponent, listeners: seq[UIListener], agentType: AgentType) =
     var availableSize: ImVec2
     igGetContentRegionAvail(addr availableSize)
     let inputWidth = availableSize.x * 0.65
@@ -312,27 +322,26 @@ proc drawBasicTab(component: AgentModalComponent, listeners: seq[UIListener], is
 
     igDummy(vec2(0.0f, 5.0f))
 
-    # Output format (only for Imperator)
-    if isImperator:
+    # Agent-specific options
+    case agentType:
+    of AGENT_IMPERATOR:
+        # Output format (only for Imperator)
         igText("Output format")
         igSetNextItemWidth(-1.0f)
         igCombo_Str("##InputOutputFormat", addr component.outputFormat,
                     (component.outputFormats.join("\0") & "\0").cstring,
                     component.outputFormats.len().int32)
         igDummy(vec2(0.0f, 5.0f))
-    else:
+        component.architecture = 0  # Imperator is x64 only
+    of AGENT_MONARCH:
         component.outputFormat = 0  # Force EXE for Monarch
-
-    # Architecture (only for Monarch)
-    if not isImperator:
+        # Architecture (only for Monarch)
         igText("Architecture")
         igSetNextItemWidth(-1.0f)
         igCombo_Str("##InputArchitecture", addr component.architecture,
                     (component.architectures.join("\0") & "\0").cstring,
                     component.architectures.len().int32)
         igDummy(vec2(0.0f, 5.0f))
-    else:
-        component.architecture = 0  # Imperator is x64 only
 
     # Listener
     igText("Listener")
@@ -346,8 +355,22 @@ proc drawBasicTab(component: AgentModalComponent, listeners: seq[UIListener], is
     # Verbose
     igCheckbox("Verbose mode", addr component.verbose)
 
+    # Agent description section
+    igDummy(vec2(0.0f, 15.0f))
+    igSeparator()
+    igDummy(vec2(0.0f, 10.0f))
+
+    igText("Agent Description")
+    igDummy(vec2(0.0f, 5.0f))
+
+    case agentType:
+    of AGENT_IMPERATOR:
+        igTextWrapped("Imperator is a lightweight, position-independent C2 agent written in Nim. It supports x64 Windows targets with EXE and DLL output formats. Imperator features advanced sleep obfuscation techniques (EKKO, ZILEAN, FOLIAGE), stack spoofing, and a minimal footprint suitable for initial access scenarios.")
+    of AGENT_MONARCH:
+        igTextWrapped("Monarch is a feature-rich C2 agent written in Nim. It supports x64 and ARM64 Windows targets with advanced sleep obfuscation techniques (EKKO, ZILEAN, FOLIAGE), stack spoofing, BOF execution, .NET assembly loading, and comprehensive post-exploitation modules.")
+
 # Tab 2: Sleep settings
-proc drawSleepTab(component: AgentModalComponent, isImperator: bool) =
+proc drawSleepTab(component: AgentModalComponent, agentType: AgentType) =
     var availableSize: ImVec2
     igGetContentRegionAvail(addr availableSize)
 
@@ -377,7 +400,8 @@ proc drawSleepTab(component: AgentModalComponent, isImperator: bool) =
     igText("Sleep obfuscation")
     igSetNextItemWidth(-1.0f)
 
-    if isImperator:
+    case agentType:
+    of AGENT_IMPERATOR:
         # Imperator only supports NONE and EKKO
         let imperatorTechniques = @["NONE", "EKKO"]
         # Clamp to valid range for Imperator
@@ -386,7 +410,7 @@ proc drawSleepTab(component: AgentModalComponent, isImperator: bool) =
         igCombo_Str("##InputSleepMask", addr component.sleepMask,
                     (imperatorTechniques.join("\0") & "\0").cstring,
                     imperatorTechniques.len().int32)
-    else:
+    of AGENT_MONARCH:
         # Monarch supports all techniques
         igCombo_Str("##InputSleepMask", addr component.sleepMask,
                     (component.sleepMaskTechniques.join("\0") & "\0").cstring,
@@ -582,17 +606,15 @@ proc drawMetadataTab(component: AgentModalComponent) =
                         ImGui_InputTextFlags_None.int32, nil, nil)
 
 # Tab 6: Config (nim.cfg editor)
-proc drawConfigTab(component: AgentModalComponent, isImperator: bool) =
+proc drawConfigTab(component: AgentModalComponent, agentType: AgentType) =
     igDummy(vec2(0.0f, 5.0f))
 
     # Determine which config file path to display
-    let configPath = if isImperator:
-        IMPERATOR_ROOT / "nim.cfg"
-    else:
-        CONQUEST_ROOT / "src" / "agent" / "nim.cfg"
+    let (configPath, agentLabel) = case agentType:
+        of AGENT_IMPERATOR: (IMPERATOR_ROOT / "nim.cfg", "Imperator")
+        of AGENT_MONARCH: (CONQUEST_ROOT / "src" / "agent" / "nim.cfg", "Monarch")
 
     # Display which config is being edited
-    let agentLabel = if isImperator: "Imperator" else: "Monarch"
     igText(fmt"Editing nim.cfg for: {agentLabel}".cstring)
     igTextDisabled(configPath.cstring)
 
@@ -607,16 +629,17 @@ proc drawConfigTab(component: AgentModalComponent, isImperator: bool) =
     # Calculate height: leave room for buttons below
     let textHeight = max(200.0f, availableSize.y - 40.0f)
 
-    # Pass buffer directly to avoid mutability issues with intermediate variables
-    if isImperator:
-        igInputTextMultiline("##NimCfgEditor",
+    # Use unique widget IDs per agent type to prevent ImGui state sharing
+    case agentType:
+    of AGENT_IMPERATOR:
+        igInputTextMultiline("##NimCfgEditorImperator",
                              addr component.imperatorNimCfg[0],
                              component.imperatorNimCfg.len.uint,
                              vec2(-1.0f, textHeight),
                              ImGui_InputTextFlags_None.int32,
                              nil, nil)
-    else:
-        igInputTextMultiline("##NimCfgEditor",
+    of AGENT_MONARCH:
+        igInputTextMultiline("##NimCfgEditorMonarch",
                              addr component.monarchNimCfg[0],
                              component.monarchNimCfg.len.uint,
                              vec2(-1.0f, textHeight),
@@ -627,13 +650,13 @@ proc drawConfigTab(component: AgentModalComponent, isImperator: bool) =
 
     # Reload button to discard changes and reload from disk
     if igButton("Reload from disk", vec2(150.0f, 0.0f)):
-        component.loadNimCfgFromDisk(isImperator)
+        component.loadNimCfgFromDisk(agentType)
 
     igSameLine()
     igTextDisabled("(Changes are applied on Build)")
 
 # Tab 7: Build (build log and buttons)
-proc drawBuildTab(component: AgentModalComponent, listeners: seq[UIListener], isImperator: bool): AgentBuildInformation =
+proc drawBuildTab(component: AgentModalComponent, listeners: seq[UIListener], agentType: AgentType): AgentBuildInformation =
     igDummy(vec2(0.0f, 5.0f))
 
     # Build log
@@ -667,8 +690,12 @@ proc drawBuildTab(component: AgentModalComponent, listeners: seq[UIListener], is
             if enabled and i < component.modules.len:
                 modules = modules or uint32(component.modules[i].moduleType)
 
+        let nimCfgContent = case agentType:
+            of AGENT_IMPERATOR: $cstring(component.imperatorNimCfg)
+            of AGENT_MONARCH: $cstring(component.monarchNimCfg)
+
         result = AgentBuildInformation(
-            agentType: cast[AgentType](component.agentType),
+            agentType: agentType,
             outputFormat: cast[OutputFormat](component.outputFormat),
             architecture: cast[Architecture](component.architecture),
             listenerId: listeners[component.listener].listenerId,
@@ -696,10 +723,7 @@ proc drawBuildTab(component: AgentModalComponent, listeners: seq[UIListener], is
                 copyright: $cast[cstring](addr component.copyright[0]),
                 originalFilename: $cast[cstring](addr component.originalFilename[0])
             ),
-            nimCfgContent: if isImperator:
-                             $cast[cstring](addr component.imperatorNimCfg[0])
-                           else:
-                             $cast[cstring](addr component.monarchNimCfg[0])
+            nimCfgContent: nimCfgContent
         )
 
         # Save build config when building
@@ -733,12 +757,12 @@ proc draw*(component: AgentModalComponent, listeners: seq[UIListener]): AgentBui
         var availableSize: ImVec2
         igGetContentRegionAvail(addr availableSize)
 
-        let isImperator = component.agentType == 1
+        let agentType = cast[AgentType](component.agentType)
 
         # Load nim.cfg content if not loaded yet
         if not component.configLoaded:
-            component.loadNimCfgFromDisk(false)  # Load Monarch config
-            component.loadNimCfgFromDisk(true)   # Load Imperator config
+            component.loadNimCfgFromDisk(AGENT_MONARCH)
+            component.loadNimCfgFromDisk(AGENT_IMPERATOR)
             component.configLoaded = true
 
         # Tab bar
@@ -746,12 +770,12 @@ proc draw*(component: AgentModalComponent, listeners: seq[UIListener]): AgentBui
 
             # Tab 1: Basic
             if igBeginTabItem("Basic", nil, ImGuiTabItemFlags_None.int32):
-                drawBasicTab(component, listeners, isImperator)
+                drawBasicTab(component, listeners, agentType)
                 igEndTabItem()
 
             # Tab 2: Sleep
             if igBeginTabItem("Sleep", nil, ImGuiTabItemFlags_None.int32):
-                drawSleepTab(component, isImperator)
+                drawSleepTab(component, agentType)
                 igEndTabItem()
 
             # Tab 3: Evasion
@@ -765,19 +789,22 @@ proc draw*(component: AgentModalComponent, listeners: seq[UIListener]): AgentBui
                 igEndTabItem()
 
             # Tab 5: Metadata (Imperator only)
-            if isImperator:
+            case agentType:
+            of AGENT_IMPERATOR:
                 if igBeginTabItem("Metadata", nil, ImGuiTabItemFlags_None.int32):
                     drawMetadataTab(component)
                     igEndTabItem()
+            of AGENT_MONARCH:
+                discard
 
             # Tab 6: Config (shown for both agent types)
             if igBeginTabItem("Config", nil, ImGuiTabItemFlags_None.int32):
-                drawConfigTab(component, isImperator)
+                drawConfigTab(component, agentType)
                 igEndTabItem()
 
             # Tab 7: Build (always last)
             if igBeginTabItem("Build", nil, ImGuiTabItemFlags_None.int32):
-                result = drawBuildTab(component, listeners, isImperator)
+                result = drawBuildTab(component, listeners, agentType)
                 igEndTabItem()
 
             igEndTabBar()
