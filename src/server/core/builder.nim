@@ -528,10 +528,13 @@ END
         cq.error(fmt"Failed to generate resource file: {err.msg}")
         return false
 
-proc compileResourceFile(cq: Conquest, rcPath: string, resPath: string): bool =
+proc compileResourceFile(cq: Conquest, rcPath: string, resPath: string, architecture: Architecture = ARCH_X64): bool =
     ## Compile .rc to .res using windres (MinGW)
     try:
-        let cmd = fmt"x86_64-w64-mingw32-windres {rcPath} -O coff -o {resPath}"
+        let windres = case architecture:
+            of ARCH_X64: "x86_64-w64-mingw32-windres"
+            of ARCH_ARM64: fmt"{CONQUEST_ROOT}/bin/llvm-mingw-20251216-ucrt-ubuntu-22.04-x86_64/bin/aarch64-w64-mingw32-windres"
+        let cmd = fmt"{windres} {rcPath} -O coff -o {resPath}"
         cq.info(fmt"Compiling resource: {cmd}")
 
         let (output, exitCode) = execCmdEx(cmd)
@@ -546,19 +549,33 @@ proc compileResourceFile(cq: Conquest, rcPath: string, resPath: string): bool =
         cq.error(fmt"Failed to compile resource file: {err.msg}")
         return false
 
-proc compileImperator(cq: Conquest, outputFormat: OutputFormat, resPath: string = ""): string =
+proc compileImperator(cq: Conquest, outputFormat: OutputFormat, architecture: Architecture = ARCH_X64, resPath: string = ""): string =
     ## Compile Imperator agent
 
     let extension = if outputFormat == OUTPUT_DLL: ".dll" else: ".exe"
-    let outFile = fmt"{CONQUEST_ROOT}/bin/imperator.x64{extension}"
+    let archStr = if architecture == ARCH_ARM64: "arm64" else: "x64"
+    let outFile = fmt"{CONQUEST_ROOT}/bin/imperator.{archStr}{extension}"
 
     let formatStr = if outputFormat == OUTPUT_DLL: "DLL" else: "EXE"
-    cq.info(fmt"Compiling Imperator agent ({formatStr}).")
-    cq.client.sendBuildlogItem(LOG_INFO_SHORT, fmt"Compiling Imperator ({formatStr})...")
+    cq.info(fmt"Compiling Imperator agent ({formatStr}, {archStr}).")
+    cq.client.sendBuildlogItem(LOG_INFO_SHORT, fmt"Compiling Imperator ({formatStr}, {archStr})...")
 
     try:
         # Build command - compile from Imperator directory
-        var buildCmd = fmt"cd {IMPERATOR_ROOT} && nim c -o:{outFile}"
+        # Use -f to force rebuild even when Nim thinks nothing changed
+        var buildCmd = fmt"cd {IMPERATOR_ROOT} && nim c -f -o:{outFile}"
+
+        # Architecture-specific settings
+        case architecture:
+        of ARCH_X64:
+            # x64 uses default nim.cfg settings
+            discard
+        of ARCH_ARM64:
+            # ARM64 requires explicit compiler settings
+            let llvmBin = fmt"{CONQUEST_ROOT}/bin/llvm-mingw-20251216-ucrt-ubuntu-22.04-x86_64/bin"
+            buildCmd &= " --cpu:arm64 -d:arm64"
+            buildCmd &= fmt" --gcc.exe:{llvmBin}/aarch64-w64-mingw32-gcc"
+            buildCmd &= fmt" --gcc.linkerexe:{llvmBin}/aarch64-w64-mingw32-gcc"
 
         # Add DLL-specific linker flags
         if outputFormat == OUTPUT_DLL:
@@ -568,6 +585,13 @@ proc compileImperator(cq: Conquest, outputFormat: OutputFormat, resPath: string 
         if resPath.len > 0 and fileExists(resPath):
             buildCmd &= fmt" --passL:{resPath}"
             cq.info(fmt"Including resource file: {resPath}")
+
+        # Add profile path for compile-time parsing (must be absolute for cross-dir compilation)
+        if cq.profilePath.len > 0:
+            let absProfilePath = if cq.profilePath.isAbsolute: cq.profilePath
+                                 else: CONQUEST_ROOT / cq.profilePath
+            buildCmd &= fmt" -d:profilePath={absProfilePath}"
+            cq.info(fmt"Using profile: {absProfilePath}")
 
         buildCmd &= " src/main.nim"
 
@@ -597,8 +621,9 @@ proc compileImperator(cq: Conquest, outputFormat: OutputFormat, resPath: string 
 proc imperatorAgentBuild(cq: Conquest, agentBuildInformation: AgentBuildInformation): seq[byte] =
     ## Build Imperator agent with encrypted configuration (placeholder patching)
 
-    cq.info("Building Imperator agent...")
-    cq.client.sendBuildlogItem(LOG_INFO_SHORT, "Building Imperator agent...")
+    let archStr = if agentBuildInformation.architecture == ARCH_ARM64: "ARM64" else: "x64"
+    cq.info(fmt"Building Imperator agent ({archStr})...")
+    cq.client.sendBuildlogItem(LOG_INFO_SHORT, fmt"Building Imperator agent ({archStr})...")
     cq.info(fmt"Sleep technique: {agentBuildInformation.sleepSettings.sleepTechnique}, spoofStack: {agentBuildInformation.sleepSettings.spoofStack}")
 
     # Verify listener exists
@@ -645,7 +670,7 @@ proc imperatorAgentBuild(cq: Conquest, agentBuildInformation: AgentBuildInformat
             cq.client.sendBuildlogItem(LOG_ERROR_SHORT, "Failed to generate resource file")
             return @[]
 
-        if not cq.compileResourceFile(rcPath, resPath):
+        if not cq.compileResourceFile(rcPath, resPath, agentBuildInformation.architecture):
             cq.error("Failed to compile resource file")
             cq.client.sendBuildlogItem(LOG_ERROR_SHORT, "Failed to compile resource file")
             return @[]
@@ -653,7 +678,7 @@ proc imperatorAgentBuild(cq: Conquest, agentBuildInformation: AgentBuildInformat
         cq.client.sendBuildlogItem(LOG_INFO_SHORT, "Resource file compiled.")
 
     # Compile with optional resource file
-    let outPath = cq.compileImperator(agentBuildInformation.outputFormat, resPath)
+    let outPath = cq.compileImperator(agentBuildInformation.outputFormat, agentBuildInformation.architecture, resPath)
     if outPath.isEmptyOrWhitespace():
         return @[]
 

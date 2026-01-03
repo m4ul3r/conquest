@@ -332,7 +332,13 @@ proc drawBasicTab(component: AgentModalComponent, listeners: seq[UIListener], ag
                     (component.outputFormats.join("\0") & "\0").cstring,
                     component.outputFormats.len().int32)
         igDummy(vec2(0.0f, 5.0f))
-        component.architecture = 0  # Imperator is x64 only
+        # Architecture
+        igText("Architecture")
+        igSetNextItemWidth(-1.0f)
+        igCombo_Str("##InputArchitecture", addr component.architecture,
+                    (component.architectures.join("\0") & "\0").cstring,
+                    component.architectures.len().int32)
+        igDummy(vec2(0.0f, 5.0f))
     of AGENT_MONARCH:
         component.outputFormat = 0  # Force EXE for Monarch
         # Architecture (only for Monarch)
@@ -365,7 +371,7 @@ proc drawBasicTab(component: AgentModalComponent, listeners: seq[UIListener], ag
 
     case agentType:
     of AGENT_IMPERATOR:
-        igTextWrapped("Imperator is a lightweight, position-independent C2 agent written in Nim. It supports x64 Windows targets with EXE and DLL output formats. Imperator features advanced sleep obfuscation techniques (EKKO, ZILEAN, FOLIAGE), stack spoofing, and a minimal footprint suitable for initial access scenarios.")
+        igTextWrapped("Imperator is a lightweight, position-independent C2 agent written in Nim. It supports x64 and ARM64 Windows targets with EXE and DLL output formats. On x64, Imperator features advanced sleep obfuscation techniques (EKKO, ZILEAN, FOLIAGE), stack spoofing, and BOF execution. ARM64 builds use simple sleep (no obfuscation) and do not support BOF execution.")
     of AGENT_MONARCH:
         igTextWrapped("Monarch is a feature-rich C2 agent written in Nim. It supports x64 and ARM64 Windows targets with advanced sleep obfuscation techniques (EKKO, ZILEAN, FOLIAGE), stack spoofing, BOF execution, .NET assembly loading, and comprehensive post-exploitation modules.")
 

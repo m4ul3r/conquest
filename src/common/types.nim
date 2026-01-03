@@ -315,6 +315,7 @@ type
         agents*: Table[string, Agent]
         keyPair*: KeyPair
         profileString*: string
+        profilePath*: string
         profile*: Profile
         client*: WsConnection
 
