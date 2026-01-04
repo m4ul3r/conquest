@@ -150,14 +150,30 @@ proc resetModalValues*(component: AgentModalComponent) =
     component.configLoaded = false
 
 proc loadNimCfgFromDisk*(component: AgentModalComponent, agentType: AgentType) =
-    ## Load nim.cfg content from disk into the appropriate string buffer
+    ## Load nim.cfg content from disk, filtering out dynamic build defines
     let configPath = case agentType:
         of AGENT_IMPERATOR: IMPERATOR_ROOT / "nim.cfg"
         of AGENT_MONARCH: CONQUEST_ROOT / "src" / "agent" / "nim.cfg"
 
     try:
         if fileExists(configPath):
-            let content = readFile(configPath)
+            let rawContent = readFile(configPath)
+
+            # Filter out dynamic defines that are set at build time
+            var filteredLines: seq[string]
+            for line in rawContent.splitLines():
+                # Skip dynamic build-time defines
+                if line.startsWith("-d:CONFIGURATION") or
+                   line.startsWith("-d:malDebug") or
+                   line.startsWith("-d:dll"):
+                    continue
+                # Skip the placeholder comment
+                if line.contains("Encrypted configuration placeholder"):
+                    continue
+                filteredLines.add(line)
+
+            let content = filteredLines.join("\n")
+
             # Create buffer with capacity for editing (content + room to grow)
             let bufferSize = max(16384, content.len + 4096)
             var buffer = newString(bufferSize)
@@ -169,6 +185,42 @@ proc loadNimCfgFromDisk*(component: AgentModalComponent, agentType: AgentType) =
             case agentType:
                 of AGENT_IMPERATOR: component.imperatorNimCfg = buffer
                 of AGENT_MONARCH: component.monarchNimCfg = buffer
+    except:
+        discard
+
+proc saveNimCfgToDisk*(component: AgentModalComponent, agentType: AgentType) =
+    ## Save nim.cfg content to disk, filtering out dynamic build defines
+    let configPath = case agentType:
+        of AGENT_IMPERATOR: IMPERATOR_ROOT / "nim.cfg"
+        of AGENT_MONARCH: CONQUEST_ROOT / "src" / "agent" / "nim.cfg"
+
+    try:
+        # Get content from buffer (null-terminated)
+        let buffer = case agentType:
+            of AGENT_IMPERATOR: component.imperatorNimCfg
+            of AGENT_MONARCH: component.monarchNimCfg
+
+        # Find the null terminator to get actual content length
+        var contentLen = 0
+        for i in 0..<buffer.len:
+            if buffer[i] == '\0':
+                contentLen = i
+                break
+
+        let rawContent = buffer[0..<contentLen]
+
+        # Filter out dynamic defines before saving
+        var filteredLines: seq[string]
+        for line in rawContent.splitLines():
+            if line.startsWith("-d:CONFIGURATION") or
+               line.startsWith("-d:malDebug") or
+               line.startsWith("-d:dll"):
+                continue
+            if line.contains("Encrypted configuration placeholder"):
+                continue
+            filteredLines.add(line)
+
+        writeFile(configPath, filteredLines.join("\n"))
     except:
         discard
 
@@ -654,12 +706,16 @@ proc drawConfigTab(component: AgentModalComponent, agentType: AgentType) =
 
     igDummy(vec2(0.0f, 5.0f))
 
-    # Reload button to discard changes and reload from disk
-    if igButton("Reload from disk", vec2(150.0f, 0.0f)):
+    # Save and Reload buttons
+    if igButton("Save to disk", vec2(120.0f, 0.0f)):
+        component.saveNimCfgToDisk(agentType)
+
+    igSameLine()
+    if igButton("Reload from disk", vec2(120.0f, 0.0f)):
         component.loadNimCfgFromDisk(agentType)
 
     igSameLine()
-    igTextDisabled("(Changes are applied on Build)")
+    igTextDisabled("(Dynamic flags set automatically on Build)")
 
 # Tab 7: Build (build log and buttons)
 proc drawBuildTab(component: AgentModalComponent, listeners: seq[UIListener], agentType: AgentType): AgentBuildInformation =

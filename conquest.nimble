@@ -21,6 +21,9 @@ task all, "Build conquest client and server binaries":
     exec fmt"nim c -d:release -d:CONQUEST_ROOT={cqRoot} src/server/main.nim"
     exec fmt"nim c -d:release -d:CONQUEST_ROOT={cqRoot} src/client/main.nim"
 
+task setup, "Download and setup ARM64 cross-compiler toolchain":
+    exec "nim c -r scripts/setup-toolchain.nim"
+
 
 # Dependencies
 

