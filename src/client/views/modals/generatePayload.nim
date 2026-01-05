@@ -423,7 +423,7 @@ proc drawBasicTab(component: AgentModalComponent, listeners: seq[UIListener], ag
 
     case agentType:
     of AGENT_IMPERATOR:
-        igTextWrapped("Imperator is a lightweight, position-independent C2 agent written in Nim. It supports x64 and ARM64 Windows targets with EXE and DLL output formats. On x64, Imperator features advanced sleep obfuscation techniques (EKKO, ZILEAN, FOLIAGE), stack spoofing, and BOF execution. ARM64 builds use simple sleep (no obfuscation) and do not support BOF execution.")
+        igTextWrapped("Imperator is a lightweight, position-independent C2 agent written in Nim. It supports x64 and ARM64 Windows targets with EXE and DLL output formats. Both architectures support advanced sleep obfuscation techniques (EKKO, ZILEAN, FOLIAGE) with stack spoofing. BOF execution is available on x64 only.")
     of AGENT_MONARCH:
         igTextWrapped("Monarch is a feature-rich C2 agent written in Nim. It supports x64 and ARM64 Windows targets with advanced sleep obfuscation techniques (EKKO, ZILEAN, FOLIAGE), stack spoofing, BOF execution, .NET assembly loading, and comprehensive post-exploitation modules.")
 
@@ -458,25 +458,34 @@ proc drawSleepTab(component: AgentModalComponent, agentType: AgentType) =
     igText("Sleep obfuscation")
     igSetNextItemWidth(-1.0f)
 
+    # Determine available techniques based on architecture
+    let isArm64 = component.architecture == 1  # ARM64 is index 1
+
     case agentType:
     of AGENT_IMPERATOR:
-        # Imperator only supports NONE and EKKO
-        let imperatorTechniques = @["NONE", "EKKO"]
-        # Clamp to valid range for Imperator
-        if component.sleepMask > 1:
-            component.sleepMask = 0
-        igCombo_Str("##InputSleepMask", addr component.sleepMask,
-                    (imperatorTechniques.join("\0") & "\0").cstring,
-                    imperatorTechniques.len().int32)
+        if isArm64:
+            # ARM64: Supports NONE, EKKO, ZILEAN, FOLIAGE (all with proper LR handling)
+            igCombo_Str("##InputSleepMask", addr component.sleepMask,
+                        (component.sleepMaskTechniques.join("\0") & "\0").cstring,
+                        component.sleepMaskTechniques.len().int32)
+        else:
+            # x64: Imperator only supports NONE and EKKO
+            let imperatorTechniques = @["NONE", "EKKO"]
+            # Clamp to valid range for Imperator x64
+            if component.sleepMask > 1:
+                component.sleepMask = 0
+            igCombo_Str("##InputSleepMask", addr component.sleepMask,
+                        (imperatorTechniques.join("\0") & "\0").cstring,
+                        imperatorTechniques.len().int32)
     of AGENT_MONARCH:
-        # Monarch supports all techniques
+        # Both x64 and ARM64 support all techniques
         igCombo_Str("##InputSleepMask", addr component.sleepMask,
                     (component.sleepMaskTechniques.join("\0") & "\0").cstring,
                     component.sleepMaskTechniques.len().int32)
 
     igDummy(vec2(0.0f, 5.0f))
 
-    # Stack spoofing (only for EKKO/ZILEAN)
+    # Stack spoofing (available for EKKO/ZILEAN on both x64 and ARM64)
     let currentTechnique = component.sleepMaskTechniques[component.sleepMask]
     let stackSpoofDisabled = currentTechnique != $EKKO and currentTechnique != $ZILEAN
     igBeginDisabled(stackSpoofDisabled)
