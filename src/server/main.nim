@@ -172,6 +172,7 @@ proc startServer*(profilePath: string) =
         # Initialize framework context
         let profileString = readFile(profilePath)
         cq = Conquest.init(profileString)
+        cq.profilePath = profilePath
 
         cq.info("Using profile \"", cq.profile.getString("name"), "\" (", profilePath ,").")
         

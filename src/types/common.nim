@@ -97,11 +97,19 @@ type
         MSG_REGISTER = 2'u8
         MSG_HEARTBEAT = 100'u8
 
-    PayloadType* = enum 
+    PayloadType* = enum
         EXE = 0'u8
-        SVC = 1'u8 
-        DLL = 2'u8 
+        SVC = 1'u8
+        DLL = 2'u8
         # BIN = 3'u8
+
+    AgentType* = enum
+        AGENT_MONARCH = 0'u8
+        AGENT_IMPERATOR = 1'u8
+
+    Architecture* = enum
+        ARCH_X64 = 0'u8
+        ARCH_ARM64 = 1'u8
 
 type 
     WorkingHours* = ref object 

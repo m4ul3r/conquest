@@ -29,6 +29,20 @@ proc encrypt*(key: Key, iv: Iv, data: seq[byte], sequenceNumber: uint32 = 0): (s
     
     return (encData, tag)
 
+proc encryptNoAad*(key: Key, iv: Iv, data: seq[byte]): (seq[byte], AuthenticationTag) =
+    ## Encrypt data using AES-256 GCM without AAD (for Imperator configuration encryption)
+    var encData = newSeq[byte](data.len)
+    var tag: AuthenticationTag
+
+    var ctx: GCM[aes256]
+    ctx.init(key, iv, @[])  # Empty AAD
+
+    ctx.encrypt(data, encData)
+    ctx.getTag(tag)
+    ctx.clear()
+
+    return (encData, tag)
+
 proc decrypt*(key: Key, iv: Iv, encData: seq[byte], sequenceNumber: uint32 = 0): (seq[byte], AuthenticationTag) =
     
     # Decrypt data using AES-256 GCM

@@ -42,9 +42,14 @@ commands[CMD_SELF_DESTRUCT] = proc(ctx: AgentCtx, task: Task): TaskResult =
     except CatchableError as err:
         return createTaskResult(task, STATUS_FAILED, RESULT_STRING, string.toBytes(err.msg))
         
-commands[CMD_SLEEP] = proc(ctx: AgentCtx, task: Task): TaskResult = 
-    try: 
-        let delay = Bytes.toUint32(task.args[0].data) 
+commands[CMD_SLEEP] = proc(ctx: AgentCtx, task: Task): TaskResult =
+    try:
+        # No argument = query current sleep settings without changing them
+        if task.args.len == 0 or task.args[0].data.len == 0:
+            let response = fmt"Sleep settings: Technique: {$ctx.sleepSettings.sleepTechnique}, Delay: {$ctx.sleepSettings.sleepDelay}ms, Jitter: {$ctx.sleepSettings.jitter}%, Stack spoofing: {$ctx.sleepSettings.spoofStack}"
+            return createTaskResult(task, STATUS_COMPLETED, RESULT_STRING, string.toBytes(response))
+
+        let delay = Bytes.toUint32(task.args[0].data)
 
         print fmt"   [>] Setting sleep delay to {delay} seconds."
         ctx.sleepSettings.sleepDelay = delay
@@ -52,7 +57,7 @@ commands[CMD_SLEEP] = proc(ctx: AgentCtx, task: Task): TaskResult =
         let response = fmt"Sleep settings: Technique: {$ctx.sleepSettings.sleepTechnique}, Delay: {$ctx.sleepSettings.sleepDelay}ms, Jitter: {$ctx.sleepSettings.jitter}%, Stack spoofing: {$ctx.sleepSettings.spoofStack}"
         return createTaskResult(task, STATUS_COMPLETED, RESULT_STRING, string.toBytes(response))
 
-    except CatchableError as err: 
+    except CatchableError as err:
         return createTaskResult(task, STATUS_FAILED, RESULT_STRING, string.toBytes(err.msg))
 
 commands[CMD_JITTER] = proc(ctx: AgentCtx, task: Task): TaskResult = 

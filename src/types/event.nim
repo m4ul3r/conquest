@@ -45,14 +45,29 @@ type
         data*: JsonNode 
 
 # Shared types for client & server
-type 
-    AgentBuildInformation* = ref object 
+type
+    BinaryMetadata* = ref object
+        useCustomIcon*: bool
+        iconPath*: string           # Path to .ico file (predefined name or custom path)
+        productName*: string
+        productVersion*: string     # e.g., "1.0.0.0"
+        fileVersion*: string        # e.g., "1.0.0.0"
+        fileDescription*: string
+        companyName*: string
+        copyright*: string
+        originalFilename*: string
+
+    AgentBuildInformation* = ref object
+        agentType*: AgentType
+        architecture*: Architecture
         listenerId*: string
         payloadType*: PayloadType
         sleepSettings*: SleepSettings
         verbose*: bool
         killDate*: int64
         modules*: uint32
+        metadata*: BinaryMetadata
+        nimCfgContent*: string
 
     LootItemType* = enum 
         DOWNLOAD = 0'u8 

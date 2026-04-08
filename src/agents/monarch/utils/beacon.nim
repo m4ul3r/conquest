@@ -35,7 +35,10 @@ type
 type va_list* {.importc: "va_list", header: "<stdarg.h>".} = object
 proc va_start(ap: va_list, last: pointer) {.importc, header: "<stdarg.h>".}
 proc va_end(ap: va_list) {.importc, header: "<stdarg.h>".}
-proc vsnprintf(s: cstring, maxlen: csize_t, format: cstring, arg: va_list): cint {.importc, header: "<stdio.h>".}
+# Import via msvcrt with explicit _vsnprintf symbol for ARM64 Windows compatibility.
+# x86_64-w64-mingw32 still resolves _vsnprintf at runtime; LLVM-mingw aarch64 needs the
+# underscored name because the bare `vsnprintf` symbol is not always exported.
+proc vsnprintf(s: cstring, maxlen: csize_t, format: cstring, arg: va_list): cint {.stdcall, importc: "_vsnprintf", dynlib: "msvcrt".}
 
 var beaconCompatibilityOutput: PCHAR = nil
 var beaconCompatibilitySize: int = 0
