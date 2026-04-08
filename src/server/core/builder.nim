@@ -1,4 +1,4 @@
-import terminal, strformat, strutils, sequtils, tables, system, osproc, streams, os
+import terminal, strformat, strutils, tables, system, osproc, streams, os
 
 import ../globals
 import ../core/[logger, websocket]

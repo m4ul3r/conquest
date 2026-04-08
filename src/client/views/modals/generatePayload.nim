@@ -430,7 +430,7 @@ proc drawMetadataTab(component: AgentModalComponent) =
     igCheckbox("Use custom icon path", addr component.useCustomIcon)
     igBeginDisabled(not component.useCustomIcon)
     igSetNextItemWidth(-1.0f)
-    igInputText("##CustomIconPath", addr component.customIconPath[0], 256,
+    igInputText("##CustomIconPath", cast[cstring](addr component.customIconPath[0]), 256,
                 ImGui_InputTextFlags_None.int32, nil, nil)
     igEndDisabled()
 
@@ -441,46 +441,46 @@ proc drawMetadataTab(component: AgentModalComponent) =
 
     igText("Product name")
     igSetNextItemWidth(-1.0f)
-    igInputText("##ProductName", addr component.productName[0], 128,
+    igInputText("##ProductName", cast[cstring](addr component.productName[0]), 128,
                 ImGui_InputTextFlags_None.int32, nil, nil)
     igDummy(vec2(0.0f, 5.0f))
 
     igText("File description")
     igSetNextItemWidth(-1.0f)
-    igInputText("##FileDescription", addr component.fileDescription[0], 256,
+    igInputText("##FileDescription", cast[cstring](addr component.fileDescription[0]), 256,
                 ImGui_InputTextFlags_None.int32, nil, nil)
     igDummy(vec2(0.0f, 5.0f))
 
     igText("Company name")
     igSetNextItemWidth(-1.0f)
-    igInputText("##CompanyName", addr component.companyName[0], 128,
+    igInputText("##CompanyName", cast[cstring](addr component.companyName[0]), 128,
                 ImGui_InputTextFlags_None.int32, nil, nil)
     igDummy(vec2(0.0f, 5.0f))
 
     igText("Copyright")
     igSetNextItemWidth(-1.0f)
-    igInputText("##Copyright", addr component.copyright[0], 128,
+    igInputText("##Copyright", cast[cstring](addr component.copyright[0]), 128,
                 ImGui_InputTextFlags_None.int32, nil, nil)
     igDummy(vec2(0.0f, 5.0f))
 
     igText("Product version")
     igSetNextItemWidth(-1.0f)
     igInputTextWithHint("##ProductVersion", "1.0.0.0",
-                        addr component.productVersion[0], 32,
+                        cast[cstring](addr component.productVersion[0]), 32,
                         ImGui_InputTextFlags_None.int32, nil, nil)
     igDummy(vec2(0.0f, 5.0f))
 
     igText("File version")
     igSetNextItemWidth(-1.0f)
     igInputTextWithHint("##FileVersion", "1.0.0.0",
-                        addr component.fileVersion[0], 32,
+                        cast[cstring](addr component.fileVersion[0]), 32,
                         ImGui_InputTextFlags_None.int32, nil, nil)
     igDummy(vec2(0.0f, 5.0f))
 
     igText("Original filename")
     igSetNextItemWidth(-1.0f)
     igInputTextWithHint("##OriginalFilename", "program.exe",
-                        addr component.originalFilename[0], 128,
+                        cast[cstring](addr component.originalFilename[0]), 128,
                         ImGui_InputTextFlags_None.int32, nil, nil)
 
 proc drawConfigTab(component: AgentModalComponent, agentType: AgentType) =
@@ -503,13 +503,13 @@ proc drawConfigTab(component: AgentModalComponent, agentType: AgentType) =
     case agentType:
     of AGENT_IMPERATOR:
         igInputTextMultiline("##NimCfgEditorImperator",
-                             addr component.imperatorNimCfg[0],
+                             cast[cstring](addr component.imperatorNimCfg[0]),
                              component.imperatorNimCfg.len.uint,
                              vec2(-1.0f, textHeight),
                              ImGui_InputTextFlags_None.int32, nil, nil)
     of AGENT_MONARCH:
         igInputTextMultiline("##NimCfgEditorMonarch",
-                             addr component.monarchNimCfg[0],
+                             cast[cstring](addr component.monarchNimCfg[0]),
                              component.monarchNimCfg.len.uint,
                              vec2(-1.0f, textHeight),
                              ImGui_InputTextFlags_None.int32, nil, nil)

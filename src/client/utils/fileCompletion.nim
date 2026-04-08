@@ -1,6 +1,7 @@
-import os, strutils, sequtils, algorithm
+import os, strutils, algorithm
 import ../../types/common
 import ./globals
+import ./utils
 
 type
     CompletionResult* = object
