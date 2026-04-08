@@ -33,3 +33,6 @@ task server,       "Build server":         build("src/server/main.nim")
 task server_debug, "Build server (debug)": build("src/server/main.nim", true)
 task client,       "Build client":         build("src/client/main.nim")
 task client_debug, "Build client (debug)": build("src/client/main.nim", true)
+
+task toolchain, "Download and setup ARM64 cross-compiler toolchain":
+    exec "nim c -r scripts/setup_toolchain.nim"

@@ -1,6 +1,5 @@
 /vendor/*
 *.db
-*.ini
 *.key
 !data/*/.gitkeep
 # Ignore binaries 
@@ -248,3 +247,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Nimble dev/paths
+nimble.develop
+nimble.paths
+nimbledeps
