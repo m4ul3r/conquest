@@ -84,23 +84,44 @@ type
 
     AgentModalComponent* = ref object of RootObj
         show*: bool
-        listener*: int32 
+        listener*: int32
         payloadType*: int32
         sleepDelay*: uint32
-        jitter*: int32 
-        sleepMask*: int32 
-        spoofStack*: bool 
-        killDateEnabled*: bool 
+        jitter*: int32
+        sleepMask*: int32
+        spoofStack*: bool
+        killDateEnabled*: bool
         killDate*: int64
         workingHoursEnabled*: bool
         workingHours*: WorkingHours
         verbose*: bool
-        payloadTypes*: seq[string]  
+        payloadTypes*: seq[string]
         sleepMaskTechniques*: seq[string]
         moduleSelection*: DualListSelectionWidget[Module]
         buildLog*: TextareaWidget
         killDateModal*: KillDateModalComponent
         workingHoursModal*: WorkingHoursModalComponent
+        # ARM64 / multi-agent extensions
+        agentType*: int32
+        agentTypes*: seq[string]
+        architecture*: int32
+        architectures*: seq[string]
+        # Binary metadata (icon, version info)
+        useCustomIcon*: bool
+        selectedIconIndex*: int32
+        customIconPath*: array[256, char]
+        productName*: array[128, char]
+        productVersion*: array[32, char]
+        fileVersion*: array[32, char]
+        fileDescription*: array[256, char]
+        companyName*: array[128, char]
+        copyright*: array[128, char]
+        originalFilename*: array[128, char]
+        predefinedIcons*: seq[string]
+        # nim.cfg editors
+        monarchNimCfg*: string
+        imperatorNimCfg*: string
+        configLoaded*: bool
 
     ChatComponent* = ref object of RootObj 
         title*: string 
@@ -185,9 +206,16 @@ type
         inputBuffer*: array[MAX_INPUT_LENGTH, char]
         textarea*: TextareaWidget
         history*: seq[string]
-        historyPosition*: int 
+        historyPosition*: int
         currentInput*: string
         filter*: ptr ImGuiTextFilter
+        # File completion state
+        showFileCompletion*: bool
+        fileMatches*: seq[string]
+        selectedMatchIndex*: int
+        completionStartPos*: int
+        completionEndPos*: int
+        pendingFileSelection*: string
     
     ProcessInfo* = object 
         pid*: uint32
